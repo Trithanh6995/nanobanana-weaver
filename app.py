@@ -1,56 +1,76 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import io
 
-# 1. Cấu hình bảo mật (Lấy mã từ két sắt Secrets)
+# --- 1. CẤU HÌNH API ---
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
 except:
-    st.error("Bạn chưa thiết lập API Key trong phần Secrets của Streamlit!")
+    st.error("Lỗi: Chưa tìm thấy API Key trong phần Secrets!")
 
-# 2. Giao diện ứng dụng
-st.set_page_config(page_title="NanoBanana Weaver", page_icon="🍌")
-st.title("🍌 NanoBanana Weaver")
-st.write("Ứng dụng ghép nhân vật vào bối cảnh bằng AI")
+# --- 2. GIAO DIỆN ---
+st.set_page_config(page_title="NanoBanana Weaver v2", page_icon="🎨")
+st.title("🎨 NanoBanana Weaver v2")
+st.markdown("#### App ghép nhân vật và tạo ảnh thực tế")
 
-# Chia làm 2 cột để tải ảnh
 col1, col2 = st.columns(2)
-
 with col1:
-    char_file = st.file_uploader("👤 Chọn ảnh Nhân Vật", type=['jpg', 'png', 'jpeg'])
+    char_file = st.file_uploader("👤 Ảnh Nhân Vật", type=['jpg', 'png', 'jpeg'])
     if char_file:
-        st.image(char_file, caption="Nhân vật của bạn", use_container_width=True)
+        st.image(char_file, caption="Nhân vật mẫu", use_container_width=True)
 
 with col2:
-    bg_file = st.file_uploader("🏞️ Chọn ảnh Bối Cảnh", type=['jpg', 'png', 'jpeg'])
+    bg_file = st.file_uploader("🏞️ Ảnh Bối Cảnh", type=['jpg', 'png', 'jpeg'])
     if bg_file:
-        st.image(bg_file, caption="Bối cảnh bạn muốn", use_container_width=True)
+        st.image(bg_file, caption="Bối cảnh mẫu", use_container_width=True)
 
-# Ô nhập mô tả hành động
-prompt_text = st.text_input("📝 Nhân vật đang làm gì?", placeholder="Ví dụ: Đang ngồi đọc sách bên cửa sổ...")
+prompt_user = st.text_input("📝 Mô tả hành động:", placeholder="Ví dụ: Nhân vật đang ngồi uống trà trong bối cảnh này...")
 
-# Nút bấm xử lý
-if st.button("🚀 Bắt đầu tạo ảnh", use_container_width=True):
-    if char_file and bg_file and prompt_text:
-        with st.spinner("NanoBanana đang 'dệt' ảnh..."):
+# --- 3. XỬ LÝ VÀ TẠO ẢNH ---
+if st.button("🚀 Vẽ Ảnh Ngay", use_container_width=True):
+    if char_file and bg_file and prompt_user:
+        with st.spinner("Đang phân tích và vẽ ảnh... Vui lòng đợi trong giây lát!"):
             try:
-                # Gọi mô gia đình Gemini 1.5 Flash (Xử lý ảnh cực tốt)
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # Bước A: Dùng Gemini Flash để tạo một "siêu mô tả" (Master Prompt)
+                vision_model = genai.GenerativeModel('gemini-1.5-flash')
                 char_img = Image.open(char_file)
                 bg_img = Image.open(bg_file)
                 
-                # Gửi yêu cầu cho AI
-                response = model.generate_content([
-                    f"Hãy đóng vai là NanoBanana. Dựa trên ảnh nhân vật và ảnh bối cảnh này, "
-                    f"hãy mô tả chi tiết cách nhân vật thực hiện hành động: {prompt_text}. "
-                    f"Hãy chú ý đến ánh sáng và sự hòa hợp giữa người và cảnh.",
-                    char_img, bg_img
-                ])
+                analysis_prompt = (
+                    f"Dựa trên 2 ảnh này, hãy tạo 1 câu lệnh tiếng Anh cực kỳ chi tiết để vẽ ảnh: "
+                    f"Đặt nhân vật trong ảnh 1 vào bối cảnh ảnh 2. Hành động: {prompt_user}. "
+                    f"Mô tả chi tiết ngoại hình, quần áo, ánh sáng và sự hòa hợp. "
+                    f"Chỉ trả về câu lệnh tiếng Anh, không nói gì thêm."
+                )
                 
-                st.success("Xong rồi! Đây là kết quả:")
-                st.write(response.text)
+                master_prompt = vision_model.generate_content([analysis_prompt, char_img, bg_img]).text
+                
+                # Bước B: Dùng model Imagen để vẽ ảnh (Sử dụng model tạo ảnh của Google)
+                # Lưu ý: Một số tài khoản cần quyền truy cập Imagen 3
+                image_model = genai.GenerativeModel('imagen-3.0-generate-001')
+                
+                # Tạo ảnh từ Master Prompt
+                response = image_model.generate_content(master_prompt)
+                
+                # Bước C: Hiển thị kết quả
+                st.success("Tác phẩm của bạn đã hoàn thành!")
+                
+                # Lấy dữ liệu ảnh và hiển thị
+                for generated_image in response.generated_images:
+                    st.image(generated_image.image, caption="Kết quả từ NanoBanana", use_container_width=True)
+                    
+                    # Nút tải ảnh về
+                    img_byte_arr = io.BytesIO()
+                    generated_image.image.save(img_byte_arr, format='PNG')
+                    st.download_button(label="📥 Tải ảnh về máy", 
+                                       data=img_byte_arr.getvalue(), 
+                                       file_name="nano_banana_result.png", 
+                                       mime="image/png")
+
             except Exception as e:
-                st.error(f"Lỗi rồi: {e}")
+                st.error(f"Có lỗi nhỏ: {e}")
+                st.info("Mẹo: Nếu lỗi về 'model not found', có thể tài khoản của bạn đang dùng bản miễn phí chưa mở quyền vẽ ảnh trực tiếp. Nhưng đừng lo, mình có thể giúp bạn cách khác!")
     else:
-        st.warning("Bạn cần tải đủ 2 ảnh và nhập mô tả nhé!")
+        st.warning("Bạn hãy chọn đủ 2 ảnh và nhập mô tả nhé!")
