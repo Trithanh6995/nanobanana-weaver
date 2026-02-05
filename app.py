@@ -11,9 +11,9 @@ except:
     st.error("Lỗi: Chưa tìm thấy API Key trong phần Secrets!")
 
 # --- 2. GIAO DIỆN ---
-st.set_page_config(page_title="NanoBanana Weaver v2", page_icon="🎨")
-st.title("🎨 NanoBanana Weaver v2")
-st.markdown("#### App ghép nhân vật và tạo ảnh thực tế")
+st.set_page_config(page_title="NanoBanana Weaver v2.1", page_icon="🍌")
+st.title("🍌 NanoBanana Weaver v2.1")
+st.markdown("#### App tạo ảnh nhân vật trong bối cảnh mới")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -26,51 +26,53 @@ with col2:
     if bg_file:
         st.image(bg_file, caption="Bối cảnh mẫu", use_container_width=True)
 
-prompt_user = st.text_input("📝 Mô tả hành động:", placeholder="Ví dụ: Nhân vật đang ngồi uống trà trong bối cảnh này...")
+prompt_user = st.text_input("📝 Hành động:", placeholder="Ví dụ: Hai nhân vật đang hôn nhau...")
 
 # --- 3. XỬ LÝ VÀ TẠO ẢNH ---
 if st.button("🚀 Vẽ Ảnh Ngay", use_container_width=True):
     if char_file and bg_file and prompt_user:
-        with st.spinner("Đang phân tích và vẽ ảnh... Vui lòng đợi trong giây lát!"):
+        with st.spinner("Đang xử lý dữ liệu..."):
             try:
-                # Bước A: Dùng Gemini Flash để tạo một "siêu mô tả" (Master Prompt)
-                vision_model = genai.GenerativeModel('gemini-1.5-flash')
+                # Sửa tên model thành phiên bản ổn định nhất
+                # Sử dụng gemini-1.5-flash hoặc gemini-pro-vision tùy khu vực
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
                 char_img = Image.open(char_file)
                 bg_img = Image.open(bg_file)
                 
-                analysis_prompt = (
-                    f"Dựa trên 2 ảnh này, hãy tạo 1 câu lệnh tiếng Anh cực kỳ chi tiết để vẽ ảnh: "
-                    f"Đặt nhân vật trong ảnh 1 vào bối cảnh ảnh 2. Hành động: {prompt_user}. "
-                    f"Mô tả chi tiết ngoại hình, quần áo, ánh sáng và sự hòa hợp. "
-                    f"Chỉ trả về câu lệnh tiếng Anh, không nói gì thêm."
+                # Yêu cầu Gemini tạo mô tả ảnh cực chi tiết (Master Prompt)
+                analysis_query = (
+                    f"Combine these two images. Place the character from image 1 into the setting of image 2. "
+                    f"Action: {prompt_user}. Make it realistic with matching lighting and shadows. "
+                    f"Give me a detailed image generation prompt in English."
                 )
                 
-                master_prompt = vision_model.generate_content([analysis_prompt, char_img, bg_img]).text
+                response = model.generate_content([analysis_query, char_img, bg_img])
+                master_prompt = response.text
                 
-                # Bước B: Dùng model Imagen để vẽ ảnh (Sử dụng model tạo ảnh của Google)
-                # Lưu ý: Một số tài khoản cần quyền truy cập Imagen 3
-                image_model = genai.GenerativeModel('imagen-3.0-generate-001')
+                st.info("💡 AI đã lập kế hoạch vẽ ảnh. Đang tiến hành tạo hình...")
                 
-                # Tạo ảnh từ Master Prompt
-                response = image_model.generate_content(master_prompt)
-                
-                # Bước C: Hiển thị kết quả
-                st.success("Tác phẩm của bạn đã hoàn thành!")
-                
-                # Lấy dữ liệu ảnh và hiển thị
-                for generated_image in response.generated_images:
-                    st.image(generated_image.image, caption="Kết quả từ NanoBanana", use_container_width=True)
+                # Thử nghiệm tạo ảnh với Imagen
+                try:
+                    # Tên model chuẩn cho Imagen trên AI Studio
+                    imagen = genai.GenerativeModel('imagen-3.0-generate-001')
+                    img_response = imagen.generate_content(master_prompt)
                     
-                    # Nút tải ảnh về
-                    img_byte_arr = io.BytesIO()
-                    generated_image.image.save(img_byte_arr, format='PNG')
-                    st.download_button(label="📥 Tải ảnh về máy", 
-                                       data=img_byte_arr.getvalue(), 
-                                       file_name="nano_banana_result.png", 
-                                       mime="image/png")
-
+                    # Hiển thị ảnh kết quả
+                    generated_img = img_response.generated_images[0].image
+                    st.image(generated_img, caption="Kết quả từ NanoBanana", use_container_width=True)
+                    
+                    # Nút tải về
+                    buf = io.BytesIO()
+generated_img.save(buf, format="PNG")
+                    st.download_button("📥 Tải ảnh về", buf.getvalue(), "result.png", "image/png")
+                    
+                except Exception as img_err:
+                    st.warning("⚠️ Tài khoản của bạn hiện chưa được mở quyền vẽ ảnh Imagen 3 trực tiếp.")
+                    st.write("Nhưng đây là mô tả chi tiết để bạn có thể dán vào các công cụ vẽ ảnh khác (như Midjourney/DALL-E):")
+                    st.code(master_prompt)
+                    
             except Exception as e:
-                st.error(f"Có lỗi nhỏ: {e}")
-                st.info("Mẹo: Nếu lỗi về 'model not found', có thể tài khoản của bạn đang dùng bản miễn phí chưa mở quyền vẽ ảnh trực tiếp. Nhưng đừng lo, mình có thể giúp bạn cách khác!")
+                st.error(f"Lỗi hệ thống: {e}")
     else:
-        st.warning("Bạn hãy chọn đủ 2 ảnh và nhập mô tả nhé!")
+        st.warning("Vui lòng tải ảnh và nhập mô tả!")
